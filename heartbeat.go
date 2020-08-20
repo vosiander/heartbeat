@@ -76,7 +76,7 @@ func SetLogger(l logrus.FieldLogger) Option {
 func (h *Handler) ListenForConsumers() {
 	_, err := h.nc.Subscribe(h.consumerRegisterTopic, func(m *nats.Msg) {
 		h.addConsumer(string(m.Data))
-		h.logger.Debugf("consumer registered: %s", string(m.Data))
+		h.logger.WithField("msg", string(m.Data)).Infof("consumer registered")
 	})
 	if err != nil {
 		h.logger.WithError(err).Error("error listening for consumers")
@@ -123,7 +123,7 @@ func (h *Handler) truncateConsumers() {
 
 func (h *Handler) triggerHeartbeat() {
 	h.truncateConsumers()
-	h.logger.Printf("Heartbeat trigger at %s", h.publisherHeartbeatTopic)
+	h.logger.Debugf("Heartbeat trigger at topic %s", h.publisherHeartbeatTopic)
 	if err := h.nc.Publish(h.publisherHeartbeatTopic, []byte("ping")); err != nil {
 		h.logger.WithError(err).Error("heartbeat trigger failure")
 	}
