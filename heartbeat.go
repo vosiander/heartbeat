@@ -108,6 +108,13 @@ func (h *Handler) StartHeartbeatPublisher() {
 	}
 }
 
+func (h *Handler) GetConsumers() []string {
+	h.rwlock.RLock()
+	defer h.rwlock.RUnlock()
+
+	return h.natsConsumer
+}
+
 func (h *Handler) addConsumer(s string) {
 	h.rwlock.Lock()
 	defer h.rwlock.Unlock()
