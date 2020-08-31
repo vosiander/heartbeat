@@ -76,7 +76,7 @@ func SetLogger(l logrus.FieldLogger) Option {
 func (h *Handler) ListenForConsumers() {
 	_, err := h.nc.Subscribe(h.consumerRegisterTopic, func(m *nats.Msg) {
 		h.addConsumer(string(m.Data))
-		h.logger.WithField("msg", string(m.Data)).Infof("consumer registered")
+		h.logger.WithField("msg", string(m.Data)).Trace("consumer registered")
 	})
 	if err != nil {
 		h.logger.WithError(err).Error("error listening for consumers")
@@ -85,7 +85,7 @@ func (h *Handler) ListenForConsumers() {
 
 func (h *Handler) ListenForHeartbeatPublisher() {
 	_, err := h.nc.Subscribe(h.publisherHeartbeatTopic, func(msg *nats.Msg) {
-		h.logger.WithField("topic", h.publisherHeartbeatTopic).Debug("received heartbeat")
+		h.logger.WithField("topic", h.publisherHeartbeatTopic).Trace("received heartbeat")
 		if err := h.nc.Publish(h.consumerRegisterTopic, []byte(h.id)); err != nil {
 			h.logger.WithField("topic", h.consumerRegisterTopic).Warn("could not publish to register topic")
 		}
@@ -130,7 +130,7 @@ func (h *Handler) truncateConsumers() {
 
 func (h *Handler) triggerHeartbeat() {
 	h.truncateConsumers()
-	h.logger.Debugf("Heartbeat trigger at topic %s", h.publisherHeartbeatTopic)
+	h.logger.WithField("topic", h.publisherHeartbeatTopic).Trace("Heartbeat triggered")
 	if err := h.nc.Publish(h.publisherHeartbeatTopic, []byte("ping")); err != nil {
 		h.logger.WithError(err).Error("heartbeat trigger failure")
 	}
