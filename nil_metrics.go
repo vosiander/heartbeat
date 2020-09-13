@@ -9,6 +9,6 @@ func NewNilMetrics() *NilMetrics {
 	return &NilMetrics{}
 }
 
-func (m *NilMetrics) RecordConsumerRegistered(id string) {
+func (m *NilMetrics) RecordConsumerRegistered(id string, current int) {
 	return
 }

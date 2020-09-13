@@ -29,7 +29,7 @@ type (
 	}
 
 	MetricsHandler interface {
-		RecordConsumerRegistered(id string)
+		RecordConsumerRegistered(id string, current int)
 	}
 
 	Option func(h *Handler)
@@ -131,8 +131,8 @@ func (h *Handler) addConsumer(s string) {
 	h.rwlock.Lock()
 	defer h.rwlock.Unlock()
 
-	h.metrics.RecordConsumerRegistered(s)
 	h.natsConsumer = append(h.natsConsumer, s)
+	h.metrics.RecordConsumerRegistered(s, len(h.natsConsumer))
 }
 
 func (h *Handler) truncateConsumers() {
