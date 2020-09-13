@@ -25,6 +25,11 @@ type (
 		heartbeatTicker         *time.Ticker
 		heartbeatTickerTime     time.Duration
 		logger                  logrus.FieldLogger
+		metrics                 MetricsHandler
+	}
+
+	MetricsHandler interface {
+		RecordConsumerRegistered(id string)
 	}
 
 	Option func(h *Handler)
@@ -39,6 +44,7 @@ func NewHandler(id string, nc *nats.Conn, hos ...Option) *Handler {
 		publisherHeartbeatTopic: PublisherTopic,
 		consumerRegisterTopic:   ConsumerRegisterTopic,
 		heartbeatTickerTime:     TickerTime,
+		metrics:                 NewNilMetrics(),
 		logger:                  logrus.WithField("component", "heartbeat"),
 	}
 
@@ -70,6 +76,12 @@ func SetHeartbeatTickerTime(ti time.Duration) Option {
 func SetLogger(l logrus.FieldLogger) Option {
 	return func(h *Handler) {
 		h.logger = l
+	}
+}
+
+func SetMetrics(m MetricsHandler) Option {
+	return func(h *Handler) {
+		h.metrics = m
 	}
 }
 
@@ -119,6 +131,7 @@ func (h *Handler) addConsumer(s string) {
 	h.rwlock.Lock()
 	defer h.rwlock.Unlock()
 
+	h.metrics.RecordConsumerRegistered(s)
 	h.natsConsumer = append(h.natsConsumer, s)
 }
 
