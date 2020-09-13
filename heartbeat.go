@@ -30,6 +30,7 @@ type (
 
 	MetricsHandler interface {
 		RecordConsumerRegistered(id string, current int)
+		ResetConsumerRegistered()
 	}
 
 	Option func(h *Handler)
@@ -139,6 +140,7 @@ func (h *Handler) truncateConsumers() {
 	h.rwlock.Lock()
 	defer h.rwlock.Unlock()
 	h.natsConsumer = []string{}
+	h.metrics.ResetConsumerRegistered()
 }
 
 func (h *Handler) triggerHeartbeat() {

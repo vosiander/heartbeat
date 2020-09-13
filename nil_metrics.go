@@ -12,3 +12,7 @@ func NewNilMetrics() *NilMetrics {
 func (m *NilMetrics) RecordConsumerRegistered(id string, current int) {
 	return
 }
+
+func (m *NilMetrics) ResetConsumerRegistered() {
+	return
+}
