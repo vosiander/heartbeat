@@ -88,7 +88,9 @@ func SetMetrics(m MetricsHandler) Option {
 
 func (h *Handler) ListenForConsumers() {
 	_, err := h.nc.Subscribe(h.consumerRegisterTopic, func(m *nats.Msg) {
-		h.addConsumer(string(m.Data))
+		s := string(m.Data)
+		h.addConsumer(s)
+		go h.metrics.RecordConsumerRegistered(s, len(h.natsConsumer))
 		h.logger.WithField("msg", string(m.Data)).Trace("consumer registered")
 	})
 	if err != nil {
@@ -133,14 +135,13 @@ func (h *Handler) addConsumer(s string) {
 	defer h.rwlock.Unlock()
 
 	h.natsConsumer = append(h.natsConsumer, s)
-	h.metrics.RecordConsumerRegistered(s, len(h.natsConsumer))
 }
 
 func (h *Handler) truncateConsumers() {
 	h.rwlock.Lock()
 	defer h.rwlock.Unlock()
 	h.natsConsumer = []string{}
-	h.metrics.ResetConsumerRegistered()
+	go h.metrics.ResetConsumerRegistered()
 }
 
 func (h *Handler) triggerHeartbeat() {
