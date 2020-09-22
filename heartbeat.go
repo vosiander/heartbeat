@@ -115,11 +115,11 @@ func (h *Handler) Close() {
 
 func (h *Handler) ListenForConsumers() {
 	_, err := h.nc.Subscribe(h.consumerRegisterTopic, func(m *nats.Msg) {
-		ctx, cancel := context.WithTimeout(context.Background(), h.metricsTimeout)
-		defer cancel()
+		//ctx, cancel := context.WithTimeout(context.Background(), h.metricsTimeout)
+		//defer cancel()
 		s := string(m.Data)
 		h.addConsumer(s)
-		h.metrics.RecordConsumerRegistered(ctx, s, len(h.natsConsumer))
+		h.metrics.RecordConsumerRegistered(context.Background(), s, len(h.natsConsumer))
 
 		h.logger.WithField("msg", string(m.Data)).Trace("consumer registered")
 	})
@@ -183,9 +183,9 @@ func (h *Handler) truncateConsumers() {
 	defer h.rwlock.Unlock()
 	h.natsConsumer = []string{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), h.metricsTimeout)
-	defer cancel()
-	h.metrics.ResetConsumerRegistered(ctx)
+	//ctx, cancel := context.WithTimeout(context.Background(), h.metricsTimeout)
+	//defer cancel()
+	h.metrics.ResetConsumerRegistered(context.Background())
 }
 
 func (h *Handler) triggerHeartbeat() {
@@ -202,6 +202,7 @@ func (h *Handler) triggerConsumer() {
 	if err != nil {
 		h.logger.WithError(err).Error("heartbeat current consumers failure")
 	}
+	h.logger.WithField("topic", h.currentConsumersTopic).Trace("Consumer Counts triggered")
 	if err := h.nc.Publish(h.currentConsumersTopic, data); err != nil {
 		h.logger.WithError(err).Error("heartbeat current consumers failure")
 	}
