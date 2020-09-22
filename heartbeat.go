@@ -2,6 +2,8 @@ package heartbeat
 
 import (
 	"context"
+	"encoding/json"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 const (
 	PublisherTopic        = "peer-heartbeat"
 	ConsumerRegisterTopic = "peer-consumer-register"
+	CurrentConsumersTopic = "peer-consumers"
 	TickerTime            = 30 * time.Second
 	MetricsTimeout        = 2 * time.Second
 )
@@ -24,7 +27,8 @@ type (
 		rwlock                  *sync.RWMutex
 		publisherHeartbeatTopic string
 		consumerRegisterTopic   string
-		heartbeatTicker         *time.Ticker
+		currentConsumersTopic   string
+		heartbeatTickers        []*time.Ticker
 		heartbeatTickerTime     time.Duration
 		metricsTimeout          time.Duration
 		logger                  logrus.FieldLogger
@@ -47,6 +51,7 @@ func NewHandler(id string, nc *nats.Conn, hos ...Option) *Handler {
 		rwlock:                  &sync.RWMutex{},
 		publisherHeartbeatTopic: PublisherTopic,
 		consumerRegisterTopic:   ConsumerRegisterTopic,
+		currentConsumersTopic:   CurrentConsumersTopic,
 		heartbeatTickerTime:     TickerTime,
 		metricsTimeout:          MetricsTimeout,
 		metrics:                 NewNilMetrics(),
@@ -72,6 +77,12 @@ func SetConsumerRegisterTopic(topic string) Option {
 	}
 }
 
+func SetCurrentConsumersTopic(topic string) Option {
+	return func(h *Handler) {
+		h.currentConsumersTopic = topic
+	}
+}
+
 func SetHeartbeatTickerTime(ti time.Duration) Option {
 	return func(h *Handler) {
 		h.heartbeatTickerTime = ti
@@ -93,6 +104,12 @@ func SetMetrics(m MetricsHandler) Option {
 func SetMetricsTimeout(t time.Duration) Option {
 	return func(h *Handler) {
 		h.metricsTimeout = t
+	}
+}
+
+func (h *Handler) Close() {
+	for _, t := range h.heartbeatTickers {
+		t.Stop()
 	}
 }
 
@@ -126,14 +143,25 @@ func (h *Handler) ListenForHeartbeatPublisher() {
 }
 
 func (h *Handler) StartHeartbeatPublisher() {
-	h.heartbeatTicker = time.NewTicker(h.heartbeatTickerTime)
+	rand.Seed(time.Now().UnixNano())
+	n := rand.Intn(1000)
 
-	for {
-		select {
-		case <-h.heartbeatTicker.C:
-			h.triggerHeartbeat()
-		}
+	h.heartbeatTickers = []*time.Ticker{
+		h.schedule(h.triggerHeartbeat, h.heartbeatTickerTime),
+		h.schedule(h.triggerConsumer, (time.Duration(n)*time.Millisecond)+time.Second),
 	}
+}
+
+func (h *Handler) schedule(f func(), interval time.Duration) *time.Ticker {
+	h.logger.WithField("interval", interval).Trace("enabling schedule")
+
+	ticker := time.NewTicker(interval)
+	go func() {
+		for range ticker.C {
+			f()
+		}
+	}()
+	return ticker
 }
 
 func (h *Handler) GetConsumers() []string {
@@ -165,5 +193,16 @@ func (h *Handler) triggerHeartbeat() {
 	h.logger.WithField("topic", h.publisherHeartbeatTopic).Trace("Heartbeat triggered")
 	if err := h.nc.Publish(h.publisherHeartbeatTopic, []byte("ping")); err != nil {
 		h.logger.WithError(err).Error("heartbeat trigger failure")
+	}
+}
+
+func (h *Handler) triggerConsumer() {
+	currentConsumers := map[string][]string{"consumers": h.GetConsumers()}
+	data, err := json.Marshal(currentConsumers)
+	if err != nil {
+		h.logger.WithError(err).Error("heartbeat current consumers failure")
+	}
+	if err := h.nc.Publish(h.currentConsumersTopic, data); err != nil {
+		h.logger.WithError(err).Error("heartbeat current consumers failure")
 	}
 }
