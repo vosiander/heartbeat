@@ -148,7 +148,7 @@ func (h *Handler) StartHeartbeatPublisher() {
 
 	h.heartbeatTickers = []*time.Ticker{
 		h.schedule(h.triggerHeartbeat, h.heartbeatTickerTime),
-		h.schedule(h.triggerConsumer, (time.Duration(n)*time.Millisecond)+time.Second),
+		h.schedule(h.triggerConsumers, (time.Duration(n)*time.Millisecond)+(time.Duration(5)*time.Second)), // TODO
 	}
 }
 
@@ -175,7 +175,7 @@ func (h *Handler) addConsumer(s string) {
 	h.rwlock.Lock()
 	defer h.rwlock.Unlock()
 
-	h.natsConsumer = append(h.natsConsumer, s)
+	h.natsConsumer = unique(append(h.natsConsumer, s))
 }
 
 func (h *Handler) truncateConsumers() {
@@ -196,8 +196,11 @@ func (h *Handler) triggerHeartbeat() {
 	}
 }
 
-func (h *Handler) triggerConsumer() {
-	currentConsumers := map[string][]string{"consumers": h.GetConsumers()}
+func (h *Handler) triggerConsumers() {
+	h.rwlock.Lock()
+	defer h.rwlock.Unlock()
+
+	currentConsumers := map[string][]string{"consumers": unique(h.natsConsumer)}
 	data, err := json.Marshal(currentConsumers)
 	if err != nil {
 		h.logger.WithError(err).Error("heartbeat current consumers failure")
@@ -206,4 +209,16 @@ func (h *Handler) triggerConsumer() {
 	if err := h.nc.Publish(h.currentConsumersTopic, data); err != nil {
 		h.logger.WithError(err).Error("heartbeat current consumers failure")
 	}
+}
+
+func unique(stringSlice []string) []string {
+	keys := make(map[string]bool)
+	list := []string{}
+	for _, entry := range stringSlice {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
 }
