@@ -1,6 +1,7 @@
 package heartbeat
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ const (
 	PublisherTopic        = "peer-heartbeat"
 	ConsumerRegisterTopic = "peer-consumer-register"
 	TickerTime            = 30 * time.Second
+	MetricsTimeout        = 2 * time.Second
 )
 
 type (
@@ -24,13 +26,14 @@ type (
 		consumerRegisterTopic   string
 		heartbeatTicker         *time.Ticker
 		heartbeatTickerTime     time.Duration
+		metricsTimeout          time.Duration
 		logger                  logrus.FieldLogger
 		metrics                 MetricsHandler
 	}
 
 	MetricsHandler interface {
-		RecordConsumerRegistered(id string, current int)
-		ResetConsumerRegistered()
+		RecordConsumerRegistered(ctx context.Context, id string, current int)
+		ResetConsumerRegistered(ctx context.Context)
 	}
 
 	Option func(h *Handler)
@@ -45,6 +48,7 @@ func NewHandler(id string, nc *nats.Conn, hos ...Option) *Handler {
 		publisherHeartbeatTopic: PublisherTopic,
 		consumerRegisterTopic:   ConsumerRegisterTopic,
 		heartbeatTickerTime:     TickerTime,
+		metricsTimeout:          MetricsTimeout,
 		metrics:                 NewNilMetrics(),
 		logger:                  logrus.WithField("component", "heartbeat"),
 	}
@@ -86,11 +90,20 @@ func SetMetrics(m MetricsHandler) Option {
 	}
 }
 
+func SetMetricsTimeout(t time.Duration) Option {
+	return func(h *Handler) {
+		h.metricsTimeout = t
+	}
+}
+
 func (h *Handler) ListenForConsumers() {
 	_, err := h.nc.Subscribe(h.consumerRegisterTopic, func(m *nats.Msg) {
+		ctx, cancel := context.WithTimeout(context.Background(), h.metricsTimeout)
+		defer cancel()
 		s := string(m.Data)
 		h.addConsumer(s)
-		go h.metrics.RecordConsumerRegistered(s, len(h.natsConsumer))
+		h.metrics.RecordConsumerRegistered(ctx, s, len(h.natsConsumer))
+
 		h.logger.WithField("msg", string(m.Data)).Trace("consumer registered")
 	})
 	if err != nil {
@@ -141,7 +154,10 @@ func (h *Handler) truncateConsumers() {
 	h.rwlock.Lock()
 	defer h.rwlock.Unlock()
 	h.natsConsumer = []string{}
-	go h.metrics.ResetConsumerRegistered()
+
+	ctx, cancel := context.WithTimeout(context.Background(), h.metricsTimeout)
+	defer cancel()
+	h.metrics.ResetConsumerRegistered(ctx)
 }
 
 func (h *Handler) triggerHeartbeat() {
